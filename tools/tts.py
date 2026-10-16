@@ -4,10 +4,13 @@
 # ///
 import argparse
 import os
+import re
 import sys
 import time
 import wave
 from pathlib import Path
+from xml.etree import ElementTree
+from xml.sax.saxutils import escape
 
 from google.api_core import exceptions as api_errors
 from google.cloud import texttospeech
@@ -21,6 +24,34 @@ RETRYABLE = (
     api_errors.ServiceUnavailable,
     api_errors.TooManyRequests,
 )
+ACRONYM = re.compile(r"\b[A-Z]{2,}\b")
+SPELLED = r'<say-as interpret-as="characters">\g<0></say-as>'
+AUTHORED_READING = {"say-as", "sub", "phoneme"}
+ENGLISH_LETTERS = dict(
+    zip(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "ei bi si di i ef ji eic ai jei kei el em en ou pi kyu ar es ti yu vi dabelyu eks wai zi".split(),
+    )
+)
+
+
+def english_letters(match: re.Match[str]) -> str:
+    alias = " ".join(ENGLISH_LETTERS[letter] for letter in match[0])
+    return f'<sub alias="{alias}">{match[0]}</sub>'
+
+
+def to_ssml(text: str, language: str) -> str:
+    spell = SPELLED if language.startswith("en") else english_letters
+    parts = re.split(r"(<[^>]+>)", text if "<" in text else escape(text))
+    depth = 0
+    for index, part in enumerate(parts):
+        tag = re.match(r"<(/?)([\w:-]+)", part)
+        if tag:
+            if tag[2] in AUTHORED_READING and not part.endswith("/>"):
+                depth += -1 if tag[1] else 1
+        elif depth == 0:
+            parts[index] = ACRONYM.sub(spell, part)
+    return "".join(parts)
 
 
 def narration_lines(path: Path) -> list[tuple[str, str]]:
@@ -41,6 +72,13 @@ def narration_lines(path: Path) -> list[tuple[str, str]]:
             raise SystemExit(
                 f"{path}: {line.split()[0]} has no text on the line below it"
             )
+        if "<" in text:
+            try:
+                ElementTree.fromstring(f"<speak>{text}</speak>")
+            except ElementTree.ParseError as error:
+                raise SystemExit(
+                    f"{path}: {line.split()[0]} is not valid SSML: {error}"
+                )
         blocks.append((line.split()[0], text))
 
     if not blocks:
@@ -86,10 +124,16 @@ def synthesize_with_retry(
 
     A half-finished run otherwise loses every take, and each take is a fresh recording.
     """
+    ssml = to_ssml(text, voice.language_code)
+    synthesis_input = (
+        texttospeech.SynthesisInput(ssml=f"<speak>{ssml}</speak>")
+        if "<" in ssml
+        else texttospeech.SynthesisInput(text=text)
+    )
     for attempt in range(ATTEMPTS):
         try:
             response = client.synthesize_speech(
-                input=texttospeech.SynthesisInput(text=text),
+                input=synthesis_input,
                 voice=voice,
                 audio_config=audio_config,
             )
