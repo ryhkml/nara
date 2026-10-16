@@ -5,3 +5,5 @@ frames/
 strip.png
 onion.png
 audio/
+videos/*
+!videos/.gitkeep
