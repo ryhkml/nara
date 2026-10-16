@@ -1,0 +1,7 @@
+target/
+*.mkv
+*.mp4
+frames/
+strip.png
+onion.png
+audio/
