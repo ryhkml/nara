@@ -16,7 +16,7 @@ A video without narration skips this file.
 ## Script Rules
 
 - One `vo_NN` block per scene. The line under the label is what TTS reads and what the subtitle shows, word for word.
-- Formal Indonesian with "Anda", complete short sentences, at most about 22 words per block.
+- The language of the video: formal Indonesian with "Anda" for an Indonesian video, plain English for an English one. Complete short sentences, at most about 22 words per block.
 - UI labels stay in the UI's own language, because the viewer has to find them on screen.
 - Every fact in the narration comes from an authoritative source, and anything the video shows on a live system is checked against that system.
 - `tools/tts.py` reads only a `vo_NN` line and the line after it, so other lines can carry notes for a human voice actor, such as how to pronounce a term.
@@ -49,15 +49,22 @@ A one-minute narration is under 1,000 characters, so comparing every voice stays
 export GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud-keys/tts-video.json
 uv run tools/tts.py videos/<name>
 uv run tools/tts.py videos/<name> --voice id-ID-Chirp3-HD-Puck
+uv run tools/tts.py videos/<name> --voice en-US-Chirp3-HD-Puck   # any locale, same 30 names
+uv run tools/tts.py --list-voices id-ID   # names, gender and sample rate, straight from the API
 ```
 
 - Each voice writes into its own folder, `audio/<voice>/`, so takes can be compared side by side. `audio/` is gitignored.
 - The output is 48 kHz `LINEAR16`, which already carries a WAV header.
 - The language code comes from the voice name, and the default voice is `id-ID-Chirp3-HD-Charon`.
+- With `GOOGLE_APPLICATION_CREDENTIALS` unset, the script uses `~/.config/gcloud-keys/tts-video.json` itself, so the export above is only needed for tools that require it.
+- Each run prints the key path on stderr and every take's length, so the timing constants in `lib.rs` come from measured files.
 
-Google lists 30 Chirp 3: HD voices for `id-ID`.
+Chirp 3: HD carries the same 30 voice names in every locale it supports, so `--list-voices id-ID` and `--list-voices en-US` list the same 16 male and 14 female Chirp 3: HD voices, and only the prefix changes: `id-ID-Chirp3-HD-Puck` and `en-US-Chirp3-HD-Puck` are the same voice. Verified for `id-ID`, `en-US`, `de-DE`, and `ja-JP` on 2026-10-16.
 Male: Achird, Algenib, Algieba, Alnilam, Charon, Enceladus, Fenrir, Iapetus, Orus, Puck, Rasalgethi, Sadachbia, Sadaltager, Schedar, Umbriel, Zubenelgenubi.
 Female: Achernar, Aoede, Autonoe, Callirrhoe, Despina, Erinome, Gacrux, Kore, Laomedeia, Leda, Pulcherrima, Sulafat, Vindemiatrix, Zephyr.
+
+Other families answer `--voice` too, tested with `en-US-Standard-F` and `en-US-Neural2-J`: `--list-voices en-US` returns 99 voices, of which 30 are Chirp 3: HD and the rest are Standard, WaveNet, Neural2, News, Studio, Casual, Polyglot, and three older Chirp-HD ones. `--list-voices id-ID` returns only Chirp 3: HD, Standard, and WaveNet.
+The same listing ends with 30 locale-free names for `en-US` (`Achernar`, `Achird`, …). The service answers `This voice requires a model name to be specified` for them, and no model name is documented, so use the `<locale>-Chirp3-HD-<name>` form instead.
 
 Chirp 3: HD also accepts SSML `<sub alias="...">` and `<phoneme>` for a mispronounced word, and `speaking_rate` from 0.25 to 2.0 for pace; Google labels the SSML support Preview.
 Untested improvement: set `speaking_rate` in `AudioConfig` instead of the FFmpeg `atempo` step below, so the model paces the speech itself.

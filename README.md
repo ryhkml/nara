@@ -21,7 +21,7 @@ The `nara-video` agent skill describes the method: setup, narration, scene desig
 - A local clone of fframes at `../fframes`, at commit `dca7076`
 - clang, nasm, and pkgconf, for the fframes build
 - FFmpeg with `libx264`, to encode the final video
-- uv, for narration only
+- uv and a Google Cloud Text-to-Speech service account key, for narration only
 
 [`setup.md`](.claude/skills/nara-video/references/setup.md) lists the exact versions and the Fedora package names.
 
@@ -49,14 +49,19 @@ To encode the final H.264 file and verify it, read [`render.md`](.claude/skills/
 
 ### Narration
 
+The script reads `videos/<name>/narration.txt` and writes one WAV file for each `vo_NN` block into `videos/<name>/audio/<voice>/`.
+
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS=<path to a service account key>
-uv run tools/tts.py videos/<name> --voice id-ID-Chirp3-HD-Charon
+uv run tools/tts.py videos/<name>									# id-ID-Chirp3-HD-Charon
+uv run tools/tts.py videos/<name> --voice en-US-Chirp3-HD-Puck		# any locale, same 30 voices
+uv run tools/tts.py --list-voices id-ID								# what this account can use
 ```
 
-The script reads `videos/<name>/narration.txt`.
-It writes one WAV file for each `vo_NN` block into `videos/<name>/audio/<voice>/`.
-[`narration.md`](.claude/skills/nara-video/references/narration.md) describes the format of `narration.txt` and the audio preparation steps.
+It looks for the service account key at `~/.config/gcloud-keys/tts-video.json`, so nothing has to be exported.
+Set `GOOGLE_APPLICATION_CREDENTIALS` to override that path.
+
+Make the key under a Google Cloud project with billing and the Text-to-Speech API enabled, keep it outside every repository, and run `chmod 600` on it.
+[`narration.md`](.claude/skills/nara-video/references/narration.md) walks through the setup, lists the voices, and describes the format of `narration.txt` and the FFmpeg steps that turn the takes into media.
 
 ## License
 
