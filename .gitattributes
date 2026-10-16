@@ -1,0 +1,10 @@
+# Keep test files out of the language statistics on the repository page.
+# Linguist counts them as code otherwise, so GitHub reports the repository's checks instead of its method.
+# `-linguist-detectable` is the documented way to unmark a path that linguist would count:
+# https://github.com/github-linguist/linguist/blob/main/docs/overrides.md
+tests/**           -linguist-detectable
+**/tests/**        -linguist-detectable
+**/test_*.py       -linguist-detectable
+**/*_test.*        -linguist-detectable
+**/*.test.*        -linguist-detectable
+**/*.spec.*        -linguist-detectable
