@@ -50,6 +50,9 @@ To encode the final H.264 file and verify it, read [`render.md`](.claude/skills/
 ### Narration
 
 The script reads `videos/<name>/narration.txt` and writes one WAV file for each `vo_NN` block into `videos/<name>/audio/<voice>/`.
+A line with SSML tags, such as `<break>` and `<prosody>`, goes to the API as SSML.
+These tags set the pauses, pitch, and pace of each sentence.
+The script spells each word in capital letters, such as AI, API, and GPU, with English letter names.
 
 ```bash
 uv run tools/tts.py videos/<name>									# id-ID-Chirp3-HD-Charon
@@ -62,6 +65,7 @@ Set `GOOGLE_APPLICATION_CREDENTIALS` to override that path.
 
 Make the key under a Google Cloud project with billing and the Text-to-Speech API enabled, keep it outside every repository, and run `chmod 600` on it.
 [`narration.md`](.claude/skills/nara-video/references/narration.md) walks through the setup, lists the voices, and describes the format of `narration.txt` and the FFmpeg steps that turn the takes into media.
+It also lists the SSML tags that change the intonation.
 
 ## License
 
