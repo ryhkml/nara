@@ -18,5 +18,5 @@ A version lists the `feat`, `fix`, and `perf` commits since the previous tag, be
 - `AGENTS.md` and `.agents/skills/nara-video`, mirroring the Claude Code layout so OpenCode and other agents load the same workspace rules and skill.
 - README with the layout, requirements, manual commands, and narration setup, plus the MIT license.
 
-[Unreleased]: https://github.com/ryhkml/nara/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/ryhkml/nara/releases/tag/v0.1.0
+[Unreleased]: https://github.com/ryhkml/nara/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/ryhkml/nara/releases/tag/0.1.0
