@@ -15,7 +15,9 @@ from xml.sax.saxutils import escape
 from google.api_core import exceptions as api_errors
 from google.cloud import texttospeech
 
-DEFAULT_VOICE = "id-ID-Chirp3-HD-Charon"
+DEFAULT_VOICE = "Charon"
+DEFAULT_MODEL = "gemini-3.1-flash-tts-preview"
+DEFAULT_PROMPT = "Read this in a calm, warm voice, like a documentary narrator."
 KEY_PATH = Path.home() / ".config" / "gcloud-keys" / "tts-video.json"
 ATTEMPTS = 3
 RETRYABLE = (
@@ -35,9 +37,12 @@ ENGLISH_LETTERS = dict(
 )
 
 
+def letter_names(match: re.Match[str]) -> str:
+    return " ".join(ENGLISH_LETTERS[letter] for letter in match[0])
+
+
 def english_letters(match: re.Match[str]) -> str:
-    alias = " ".join(ENGLISH_LETTERS[letter] for letter in match[0])
-    return f'<sub alias="{alias}">{match[0]}</sub>'
+    return f'<sub alias="{letter_names(match)}">{match[0]}</sub>'
 
 
 def to_ssml(text: str, language: str) -> str:
@@ -52,6 +57,34 @@ def to_ssml(text: str, language: str) -> str:
         elif depth == 0:
             parts[index] = ACRONYM.sub(spell, part)
     return "".join(parts)
+
+
+def to_plain(text: str, language: str) -> str:
+    spell = (lambda match: match[0]) if language.startswith("en") else letter_names
+    root = ElementTree.fromstring(
+        f"<speak>{text if '<' in text else escape(text)}</speak>"
+    )
+    words = ACRONYM.sub(spell, root.text or "")
+    for child in root:
+        if child.tag != "sub":
+            raise ValueError(
+                f"has <{child.tag}>, which Gemini-TTS does not read: keep only <sub>, and steer intonation with voice_prompt.txt or [short pause]"
+            )
+        words += child.get("alias", "") + ACRONYM.sub(spell, child.tail or "")
+    return words
+
+
+def to_input(
+    text: str, language: str, prompt: str | None
+) -> texttospeech.SynthesisInput:
+    if prompt is not None:
+        return texttospeech.SynthesisInput(text=to_plain(text, language), prompt=prompt)
+    ssml = to_ssml(text, language)
+    return (
+        texttospeech.SynthesisInput(ssml=f"<speak>{ssml}</speak>")
+        if "<" in ssml
+        else texttospeech.SynthesisInput(text=text)
+    )
 
 
 def narration_lines(path: Path) -> list[tuple[str, str]]:
@@ -118,18 +151,12 @@ def synthesize_with_retry(
     client: texttospeech.TextToSpeechClient,
     voice: texttospeech.VoiceSelectionParams,
     audio_config: texttospeech.AudioConfig,
-    text: str,
+    synthesis_input: texttospeech.SynthesisInput,
 ) -> bytes:
     """Synthesize one line, retrying while the service reports a transient failure.
 
     A half-finished run otherwise loses every take, and each take is a fresh recording.
     """
-    ssml = to_ssml(text, voice.language_code)
-    synthesis_input = (
-        texttospeech.SynthesisInput(ssml=f"<speak>{ssml}</speak>")
-        if "<" in ssml
-        else texttospeech.SynthesisInput(text=text)
-    )
     for attempt in range(ATTEMPTS):
         try:
             response = client.synthesize_speech(
@@ -152,7 +179,23 @@ def main() -> None:
     parser.add_argument(
         "--voice",
         default=DEFAULT_VOICE,
-        help="Google Cloud voice name, for example id-ID-Chirp3-HD-Puck (default: %(default)s)",
+        help="Gemini-TTS voice such as Puck, or a full Cloud voice name such as id-ID-Chirp3-HD-Puck (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help="Gemini-TTS model for a voice without a locale prefix (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--language",
+        default="id-ID",
+        help="language code for a voice without a locale prefix (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--rate",
+        type=float,
+        default=1.15,
+        help="speaking rate from 0.25 to 2.0 (default: %(default)s)",
     )
     parser.add_argument(
         "--list-voices",
@@ -178,21 +221,46 @@ def main() -> None:
     if args.video_dir is None:
         parser.error("video_dir is required unless --list-voices is used")
 
-    blocks = narration_lines(args.video_dir / "narration.txt")
-    out_dir = args.video_dir / "audio" / args.voice
+    narration = args.video_dir / "narration.txt"
+    blocks = narration_lines(narration)
+    if "-" in args.voice:
+        language = "-".join(args.voice.split("-")[:2])
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language, name=args.voice
+        )
+        prompt = None
+        out_dir = args.video_dir / "audio" / args.voice
+    else:
+        language = args.language
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language, name=args.voice, model_name=args.model
+        )
+        prompt_file = args.video_dir / "voice_prompt.txt"
+        prompt = (
+            prompt_file.read_text(encoding="utf-8").strip()
+            if prompt_file.is_file()
+            else DEFAULT_PROMPT
+        )
+        print(f"prompt: {prompt}", file=sys.stderr)
+        out_dir = args.video_dir / "audio" / f"{args.model}-{args.voice}"
+
+    inputs = []
+    for name, text in blocks:
+        try:
+            inputs.append((name, to_input(text, language, prompt)))
+        except ValueError as error:
+            raise SystemExit(f"{narration}: {name} {error}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="-".join(args.voice.split("-")[:2]), name=args.voice
-    )
     audio_config = texttospeech.AudioConfig(
         audio_encoding=texttospeech.AudioEncoding.LINEAR16,
         sample_rate_hertz=48000,
+        speaking_rate=args.rate,
     )
 
     total = 0.0
-    for name, text in blocks:
-        audio = synthesize_with_retry(client, voice, audio_config, text)
+    for name, synthesis_input in inputs:
+        audio = synthesize_with_retry(client, voice, audio_config, synthesis_input)
         out_file = out_dir / f"{name}.wav"
         out_file.write_bytes(audio)
         seconds = wav_seconds(out_file)
