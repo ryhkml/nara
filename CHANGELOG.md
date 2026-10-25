@@ -8,6 +8,18 @@ A version lists the `feat`, `fix`, and `perf` commits since the previous tag, be
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-25
+
+### Added
+
+- Gemini-TTS narration in `tools/tts.py`: a voice without a locale prefix goes to a Gemini-TTS model chosen with `--model`, takes its tone from a per-video style prompt in `voice_prompt.txt`, and accepts `[short pause]` tags; `--rate` sets the speaking rate on every voice.
+- SSML narration lines for Chirp 3: HD voices, checked as XML before the first paid request, with acronyms such as API and GPU spelled in English letter names.
+- `tools/sound.rs`, which synthesizes the backsound and the UI sound effects from code, so no third-party license applies, and fits the same music to each video's length.
+
+### Changed
+
+- `tools/tts.py` defaults to `gemini-3.1-flash-tts-preview` with the voice Charon at speaking rate 1.15. A line with `<prosody>` or `<break>` now needs a full Cloud voice name, such as `--voice id-ID-Chirp3-HD-Charon`, and Gemini-TTS needs the Agent Platform User role on the service account.
+
 ## [0.1.0] - 2026-10-16
 
 ### Added
@@ -18,5 +30,6 @@ A version lists the `feat`, `fix`, and `perf` commits since the previous tag, be
 - `AGENTS.md` and `.agents/skills/nara-video`, mirroring the Claude Code layout so OpenCode and other agents load the same workspace rules and skill.
 - README with the layout, requirements, manual commands, and narration setup, plus the MIT license.
 
-[Unreleased]: https://github.com/ryhkml/nara/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/ryhkml/nara/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/ryhkml/nara/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/ryhkml/nara/releases/tag/0.1.0
